@@ -1,0 +1,4 @@
+Flask==3.0.*
+yfinance==0.2.*
+pandas==2.2.*
+pandas_ta==0.3.*

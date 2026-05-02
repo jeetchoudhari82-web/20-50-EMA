@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>EMA20/EMA50 Reversal Screener</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #f0f0f0; }
+    h2 { color: #2c3e50; }
+  </style>
+</head>
+<body>
+  <h2>EMA20 > EMA50 Reversal Screener (Daily)</h2>
+  <p>
+    <strong>Matching stocks today: {{ total }}</strong>  
+    <button onclick="refresh()">Run Scan</button>
+  </p>
+
+  {% if results %}
+  <table>
+    <thead>
+      <tr>
+        <th>Ticker</th>
+        <th>Close</th>
+        <th>EMA20</th>
+        <th>EMA50</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in results %}
+      <tr>
+        <td>{{ r.ticker }}</td>
+        <td>{{ r.close }}</td>
+        <td>{{ r.ema20 }}</td>
+        <td>{{ r.ema50 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No stocks matched your strategy today.</p>
+  {% endif %}
+
+  <script>
+    function refresh() {
+      fetch("/api/run")
+        .then(r => r.json())
+        .then(data => {
+          const tbody = document.querySelector("tbody");
+          tbody.innerHTML = "";
+          if (data.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='4'>No stocks matched today.</td></tr>";
+          } else {
+            document.querySelector("h2").innerText = "Matching stocks: " + data.length;
+            data.forEach(r => {
+              tbody.innerHTML += `
+                <tr>
+                  <td>${r.ticker}</td>
+                  <td>${r.close}</td>
+                  <td>${r.ema20}</td>
+                  <td>${r.ema50}</td>
+                </tr>
+              `;
+            });
+          }
+        });
+    }
+  </script>
+</body>
+</html>

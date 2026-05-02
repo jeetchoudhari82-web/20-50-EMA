@@ -1,0 +1,103 @@
+from flask import Flask, render_template, jsonify
+import yfinance as yf
+import pandas as pd
+import pandas_ta as ta
+
+app = Flask(__name__)
+
+# —————————————————————
+# CONFIGURATION
+# —————————————————————
+# Replace with your NSE universe (e.g., Nifty 500, Nifty 100, or your watchlist)
+TICKERS = [
+    "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS",
+    "SBIN.NS", "LT.NS", "ITC.NS", "HINDUNILVR.NS", "BHARTIARTL.NS"
+]
+
+DAYS = "200d"  # Must be > 10 days for EMA + 3 red candles
+
+# —————————————————————
+# EMA‑20/EMA‑50 + 3‑red‑candles + green‑close‑above‑last‑red‑high
+# —————————————————————
+def get_daily_data(symbol, period=DAYS):
+    df = yf.download(symbol, period=period, interval="1d")
+    df = df.dropna()
+    return df
+
+
+def apply_strategy(df):
+    if len(df) < 10:
+        return False
+
+    df["ema20"] = ta.ema(df["Close"], length=20)
+    df["ema50"] = ta.ema(df["Close"], length=50)
+
+    today = df.iloc[-1]
+    prev = df.iloc[-2]
+
+    # 1. EMA 20 crosses above EMA 50 from below today
+    ema_cross_up = (today["ema20"] > today["ema50"]) and (prev["ema20"] <= prev["ema50"])
+    if not ema_cross_up:
+        return False
+
+    # 2. Count consecutive red candles before today
+    red_count = 0
+    last_red_high = None
+    for i in range(1, 7):
+        row = df.iloc[-1-i]
+        if row["Close"] < row["Open"]:
+            red_count += 1
+            last_red_high = row["High"]
+        else:
+            break
+
+    has_3_red = red_count >= 3
+    if not has_3_red:
+        return False
+
+    # 3. Today is green and closes at or above last red‑high
+    green = today["Close"] > today["Open"]
+    above_last_red_high = today["Close"] >= last_red_high
+
+    return green and above_last_red_high
+
+
+@app.route("/")
+def index():
+    results = []
+    for ticker in TICKERS:
+        try:
+            df = get_daily_data(ticker)
+            if apply_strategy(df):
+                results.append({
+                    "ticker": ticker.replace(".NS", ""),
+                    "close": round(df.iloc[-1]["Close"], 2),
+                    "ema20": round(df.iloc[-1]["ema20"], 2),
+                    "ema50": round(df.iloc[-1]["ema50"], 2),
+                })
+        except:
+            pass  # skip on error
+
+    return render_template("index.html", results=results, total=len(results))
+
+
+@app.route("/api/run")
+def run_screener_api():
+    results = []
+    for ticker in TICKERS:
+        try:
+            df = get_daily_data(ticker)
+            if apply_strategy(df):
+                results.append({
+                    "ticker": ticker.replace(".NS", ""),
+                    "close": round(df.iloc[-1]["Close"], 2),
+                    "ema20": round(df.iloc[-1]["ema20"], 2),
+                    "ema50": round(df.iloc[-1]["ema50"], 2),
+                })
+        except:
+            pass
+    return jsonify(results)
+
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)
